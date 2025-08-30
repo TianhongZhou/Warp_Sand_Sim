@@ -13,7 +13,7 @@ def damp_tangent_on_ground(q: wp.array(dtype=wp.vec3),
     if p[1] <= radius * 1.5:
         vn = wp.vec3(0.0, vi[1], 0.0)
         vt = vi - vn
-        # v[i] = vn + vt * 0.985
+        v[i] = vn + vt * 0.985
 
 @wp.kernel
 def air_drag(v: wp.array(dtype=wp.vec3),
@@ -82,21 +82,21 @@ class ExamplePhase2:
             self.state_0.clear_forces()
             self.integrator.simulate(self.model, self.state_0, self.state_1, self.sim_dt)
 
-            wp.launch(
-                kernel=damp_tangent_on_ground,
-                dim=self.model.particle_count,
-                inputs=[self.state_1.particle_q, self.state_1.particle_qd, float(self.radius)],
-                device=wp.get_device()
-            )
+            # wp.launch(
+            #     kernel=damp_tangent_on_ground,
+            #     dim=self.model.particle_count,
+            #     inputs=[self.state_1.particle_q, self.state_1.particle_qd, float(self.radius)],
+            #     device=wp.get_device()
+            # )
 
-            wp.launch(
-                kernel=air_drag,
-                dim=self.model.particle_count,
-                inputs=[self.state_1.particle_qd,
-                        self.damp_coef,
-                        float(self.sim_dt)],
-                device=wp.get_device()
-            )
+            # wp.launch(
+            #     kernel=air_drag,
+            #     dim=self.model.particle_count,
+            #     inputs=[self.state_1.particle_qd,
+            #             self.damp_coef,
+            #             float(self.sim_dt)],
+            #     device=wp.get_device()
+            # )
 
             (self.state_0, self.state_1) = (self.state_1, self.state_0)
 
