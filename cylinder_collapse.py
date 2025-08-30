@@ -23,6 +23,43 @@ def air_drag(v: wp.array(dtype=wp.vec3),
     
     v[i] = v[i] * wp.exp(-coeff * dt)
 
+@wp.kernel
+def ground_coulomb_like(q: wp.array(dtype=wp.vec3),
+                        v: wp.array(dtype=wp.vec3),
+                        radius: wp.float32,
+                        y_ground: wp.float32,
+                        contact_margin: wp.float32,  
+                        g: wp.float32,              
+                        mu_s: wp.float32,            
+                        mu_k: wp.float32,         
+                        dt: wp.float32):
+    i = wp.tid()
+    p = q[i]
+    vi = v[i]
+
+    if p[1] - y_ground <= radius + contact_margin:
+        vn = wp.vec3(0.0, vi[1], 0.0)
+        vt = vi - vn
+
+        t_len = wp.length(vt)
+        if t_len > 0.0:
+            dv_s_max = mu_s * g * dt
+
+            if t_len <= dv_s_max:
+                vt = wp.vec3(0.0, 0.0, 0.0)
+            else:
+                dv_k = mu_k * g * dt
+                new_len = t_len - dv_k
+                if new_len < 0.0:
+                    vt = wp.vec3(0.0, 0.0, 0.0)
+                else:
+                    scale = new_len / t_len
+                    vt = vt * scale
+
+        vi = vn + vt
+
+    v[i] = vi
+
 class ExamplePhase2:
     def __init__(self, in_npz="column_prep_state.npz", stage_path="collapse.usd"):
         data = np.load(in_npz)
@@ -55,7 +92,7 @@ class ExamplePhase2:
         )
 
         self.model = builder.finalize()
-        self.model.particle_mu = 10.0
+        self.model.particle_mu = 1.0
         self.model.soft_contact_mu = 0.1
         self.model.soft_contact_restitution = 0.5
 
@@ -98,6 +135,21 @@ class ExamplePhase2:
             #     device=wp.get_device()
             # )
 
+            wp.launch(
+                kernel=ground_coulomb_like,
+                dim=self.model.particle_count,
+                inputs=[self.state_1.particle_q,
+                        self.state_1.particle_qd,
+                        float(self.radius),
+                        0.0,                      # y_ground，地面高度
+                        float(self.radius*0.5),   # contact_margin
+                        9.81,                     # g
+                        0.5,                      # mu_s 静摩擦
+                        0.6,                      # mu_k 动摩擦
+                        float(self.sim_dt)],
+                device=wp.get_device()
+            )
+
             (self.state_0, self.state_1) = (self.state_1, self.state_0)
 
     def step(self):
@@ -121,7 +173,7 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--in_npz", type=str, default="column_prep_state.npz")
     parser.add_argument("--stage_path", type=lambda x: None if x=="None" else str(x), default="collapse.usd")
-    parser.add_argument("--num_frames", type=int, default=1000)
+    parser.add_argument("--num_frames", type=int, default=10000)
     args = parser.parse_known_args()[0]
 
     with wp.ScopedDevice(args.device):
