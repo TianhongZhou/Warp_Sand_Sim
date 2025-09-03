@@ -37,28 +37,26 @@ def ground_coulomb_like(q: wp.array(dtype=wp.vec3),
     p = q[i]
     vi = v[i]
 
-    if p[1] - y_ground <= radius + contact_margin:
-        vn = wp.vec3(0.0, vi[1], 0.0)
-        vt = vi - vn
+    in_contact = (p[1] - y_ground) <= (radius + contact_margin)
 
-        t_len = wp.length(vt)
-        if t_len > 0.0:
-            dv_s_max = mu_s * g * dt
+    vn = wp.vec3(0.0, vi[1], 0.0)
+    vt = vi - vn
 
-            if t_len <= dv_s_max:
+    t_len = wp.length(vt)
+    if t_len > 0.0:
+        dv_s_max = (mu_s if in_contact else mu_s * 7.0) * g * dt
+        dv_k = (mu_k if in_contact else 0.0) * g * dt
+
+        if t_len <= dv_s_max:
+            vt = wp.vec3(0.0, 0.0, 0.0)
+        else:
+            new_len = t_len - dv_k
+            if new_len < 0.0:
                 vt = wp.vec3(0.0, 0.0, 0.0)
             else:
-                dv_k = mu_k * g * dt
-                new_len = t_len - dv_k
-                if new_len < 0.0:
-                    vt = wp.vec3(0.0, 0.0, 0.0)
-                else:
-                    scale = new_len / t_len
-                    vt = vt * scale
+                vt = vt * (new_len / t_len)
 
-        vi = vn + vt
-
-    v[i] = vi
+    v[i] = vn + vt
 
 class ExamplePhase2:
     def __init__(self, in_npz="column_prep_state.npz", stage_path="collapse.usd"):
@@ -173,7 +171,7 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--in_npz", type=str, default="column_prep_state.npz")
     parser.add_argument("--stage_path", type=lambda x: None if x=="None" else str(x), default="collapse.usd")
-    parser.add_argument("--num_frames", type=int, default=10000)
+    parser.add_argument("--num_frames", type=int, default=2000)
     args = parser.parse_known_args()[0]
 
     with wp.ScopedDevice(args.device):
